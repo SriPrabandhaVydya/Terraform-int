@@ -33,7 +33,6 @@ pipeline {
             steps {
                 echo "Checking Terraform format..."
                 sh 'terraform fmt -recursive'
-'
             }
         }
 
