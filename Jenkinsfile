@@ -1,89 +1,54 @@
 pipeline {
-    agent any
 
+    parameters {
+        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically run apply after generating plan?')
+    } 
     environment {
-        TF_VAR_bucket_name = 'sri-demo-bucket-12345'
-        AWS_ACCESS_KEY_ID = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
-        AWS_DEFAULT_REGION = 'us-east-1'
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
     }
 
-    options {
-        skipStagesAfterUnstable()
-        timestamps()
-    }
-
+   agent  any
     stages {
-
-        stage('Checkout') {
+        stage('checkout') {
             steps {
-                echo "Checking out source code..."
-                checkout scm
+                 script{
+                        dir("terraform")
+                        {
+                            git "https://github.com/SriPrabandhaVydya/Terraform-int.git"
+                        }
+                    }
+                }
+            }
+
+        stage('Plan') {
+            steps {
+                sh 'pwd;cd terraform/ ; terraform init'
+                sh "pwd;cd terraform/ ; terraform plan -out tfplan"
+                sh 'pwd;cd terraform/ ; terraform show -no-color tfplan > tfplan.txt'
             }
         }
+        stage('Approval') {
+           when {
+               not {
+                   equals expected: true, actual: params.autoApprove
+               }
+           }
 
-        stage('Terraform Init') {
+           steps {
+               script {
+                    def plan = readFile 'terraform/tfplan.txt'
+                    input message: "Do you want to apply the plan?",
+                    parameters: [text(name: 'Plan', description: 'Please review the plan', defaultValue: plan)]
+               }
+           }
+       }
+
+        stage('Apply') {
             steps {
-                echo "Initializing Terraform..."
-                sh 'terraform init'
+                sh "pwd;cd terraform/ ; terraform apply -input=false tfplan"
             }
         }
-
-        stage('Terraform Format Check') {
-            steps {
-                echo "Checking Terraform format..."
-                sh 'terraform fmt -recursive'
-            }
-        }
-
-        stage('Terraform Validate') {
-            steps {
-                echo "Validating Terraform configuration..."
-                sh 'terraform validate'
-            }
-        }
-
-        stage('Terraform Plan') {
-            steps {
-                echo "Running Terraform plan..."
-                sh 'terraform plan -out=tfplan'
-            }
-        }
-
-        stage('Terraform Apply') {
-            input {
-                message "Apply Terraform plan?"
-                ok "Apply"
-            }
-            steps {
-                echo "Applying Terraform changes..."
-                sh 'terraform apply tfplan'
-            }
-        }
-
-        // Optional destroy stage - only if needed
-        // stage('Terraform Destroy') {
-        //     input {
-        //         message "Do you want to destroy the infrastructure?"
-        //         ok "Destroy"
-        //     }
-        //     steps {
-        //         echo "Destroying infrastructure..."
-        //         sh 'terraform destroy -auto-approve'
-        //     }
-        // }
     }
 
-    post {
-        success {
-            echo "Terraform deployment completed successfully!"
-        }
-        failure {
-            echo "Terraform deployment failed."
-        }
-        always {
-            echo "Cleaning up Terraform plan file..."
-            sh 'rm -f tfplan || true'
-        }
-    }
-}
+  }
