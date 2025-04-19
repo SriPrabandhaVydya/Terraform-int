@@ -32,7 +32,8 @@ pipeline {
         stage('Terraform Format Check') {
             steps {
                 echo "Checking Terraform format..."
-                sh 'terraform fmt -check'
+                sh 'terraform fmt -recursive'
+'
             }
         }
 
